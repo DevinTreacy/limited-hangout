@@ -89,28 +89,19 @@ function normalizeDateText(input: string) {
   if (!input) return input;
   const trimmed = input.trim();
 
-  // Case 1: gviz Date(...)
-  const d1 = parseGvizDateToken(trimmed);
-  if (d1) {
-    return `${d1.getFullYear()}-${pad2(d1.getMonth() + 1)}-${pad2(d1.getDate())}`;
+  // Detect Google gviz Date(YYYY,MM,DD,...)
+  const m = /^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2})/.exec(trimmed);
+  if (m) {
+    const [_, y, mth, d] = m;
+    return `${y}-${pad2(Number(mth) + 1)}-${pad2(d)}`;
   }
 
-  // Case 2: MM/DD/YYYY (e.g., 10/31/2025)
+  // Handles MM/DD/YYYY
   const mdy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
   if (mdy) {
     const [_, mm, dd, yyyy] = mdy;
     return `${yyyy}-${pad2(mm)}-${pad2(dd)}`;
   }
-
-  // Case 3: Google numeric serial (days since 1899-12-30)
-  if (/^\d+(\.\d+)?$/.test(trimmed)) {
-    const base = Date.UTC(1899, 11, 30);
-    const ms = Number(trimmed) * 86400000;
-    const d = new Date(base + ms);
-    return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
-  }
-
-  // Fallback: return as-is
   return trimmed;
 }
 
@@ -118,17 +109,15 @@ function normalizeTimeText(input: string) {
   if (!input) return input;
   const trimmed = input.trim();
 
-  // gviz Date(...) with time component
-  const d = parseGvizDateToken(trimmed);
-  if (d) {
-    let h = d.getHours();
-    const m = pad2(d.getMinutes());
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    return `${h}:${m} ${ampm}`;
+  // Detect gviz Date(YYYY,MM,DD,HH,MM,SS)
+  const m = /^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2})\)/.exec(trimmed);
+  if (m) {
+    let [, , , , hh, mm] = m;
+    hh = Number(hh);
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    hh = hh % 12 || 12;
+    return `${hh}:${pad2(mm)} ${ampm}`;
   }
-
-  // Otherwise keep whatever text (e.g., "11:30 PM")
   return trimmed;
 }
 

@@ -133,10 +133,24 @@ function normalizeTimeText(input: string) {
 }
 
 function parseDate(dateStr: string, timeStr: string) {
-  // Expects Date as YYYY-MM-DD and Time like "7:30 PM"
-  const iso = `${dateStr} ${timeStr}`;
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? null : d;
+  // dateStr: "YYYY-MM-DD", timeStr: "h:mm AM/PM"
+  if (!dateStr || !timeStr) return null;
+
+  const mDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+  const mTime = /^(\d{1,2}):(\d{2})\s*([AP]M)$/i.exec(timeStr.trim());
+  if (!mDate || !mTime) return null;
+
+  const [, y, m, d] = mDate.map(String);
+  let [, hh, mm, ampm] = mTime;
+  let H = parseInt(hh, 10);
+  const M = parseInt(mm, 10);
+
+  ampm = ampm.toUpperCase();
+  if (ampm === 'PM' && H !== 12) H += 12;
+  if (ampm === 'AM' && H === 12) H = 0;
+
+  const dt = new Date(Number(y), Number(m) - 1, Number(d), H, M, 0, 0);
+  return isNaN(dt.getTime()) ? null : dt;
 }
 
 function formatNice(dt: Date) {

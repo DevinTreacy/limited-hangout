@@ -297,26 +297,6 @@ export default function LiveShowsGrid() {
       Matt: normalize(src.Matt),
     };
   }, [data]);
-    
-        .filter((r) => r.Date && r.Time)
-        .filter((r) => {
-          const dt = parseDate(r.Date, r.Time);
-          // Only upcoming dates (today or later)
-          return dt && dt >= new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        })
-        .sort((a, b) => {
-          const da = parseDate(a.Date, a.Time)?.getTime() ?? 0;
-          const db = parseDate(b.Date, b.Time)?.getTime() ?? 0;
-          return da - db;
-        });
-    }
-
-    return {
-      Devin: normalize(src.Devin),
-      Pat: normalize(src.Pat),
-      Matt: normalize(src.Matt),
-    };
-  }, [data]);
 
   // Build filter options (months & cities) across all performers
   const filterOptions = useMemo(() => {
@@ -423,5 +403,5 @@ export default function LiveShowsGrid() {
         </p>
       </div>
     </div>
-  );
-}
+  )
+          };

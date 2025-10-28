@@ -254,7 +254,6 @@ export default function LiveShowsGrid() {
   const normalized = useMemo(() => {
     const src = data;
     const now = new Date();
-
     function normalize(arr: any[]) {
       return (arr || [])
       .map((r) => {
@@ -265,9 +264,20 @@ export default function LiveShowsGrid() {
           Time: normalizeTimeText(rawTime),
           City: (r.City || r.city || '').trim(),
           Venue: (r.Venue || r.venue || r['Venue/Show Name'] || '').trim(),
-          Ticket: (r.Ticket || r.ticket || r.Link || r['Ticket Link'] || '').trim(),
+          // <-- Accept plural and a couple of common variants
+          Ticket:
+            (r.Ticket ||
+              r.Tickets ||
+              r.ticket ||
+              r.tickets ||
+              r.Link ||
+              r['Ticket Link'] ||
+              r['Buy Link'] ||
+              '').trim(),
           Status: (r.Status || r.status || '').trim(),
         };
+      })
+      
       })      
         .filter((r) => r.Date && r.Time)
         .filter((r) => {

@@ -51,8 +51,11 @@ async function fetchSheetTab(sheetName: string) {
         const obj: Record<string, string> = {};
         headers.forEach((h: string, i: number) => {
           const cell = cells[i];
-          obj[h] = cell && cell.v != null ? String(cell.v).trim() : '';
+          // Prefer formatted string (f) if available; fallback to raw (v)
+          const raw = cell ? (cell.f ?? cell.v) : '';
+          obj[h] = raw != null ? String(raw).trim() : '';
         });
+        
         return obj;
       });
 
@@ -68,6 +71,32 @@ async function fetchSheetTab(sheetName: string) {
     console.error('Sheet fetch failed', err);
     return [];
   }
+}
+
+function parseGvizDateToken(token: string) {
+  const m = /^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2})(?:,\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2}))?\)$/.exec(token);
+  if (!m) return null;
+  const [_, y, mth, d, hh = '0', mm = '0', ss = '0'] = m;
+  return new Date(Number(y), Number(mth), Number(d), Number(hh), Number(mm), Number(ss));
+}
+
+function normalizeDateText(input: string) {
+  const d = parseGvizDateToken(input);
+  if (!d) return input;
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function normalizeTimeText(input: string) {
+  const d = parseGvizDateToken(input);
+  if (!d) return input;
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m} ${ampm}`;
 }
 
 function parseDate(dateStr: string, timeStr: string) {
@@ -195,14 +224,18 @@ export default function LiveShowsGrid() {
 
     function normalize(arr: any[]) {
       return (arr || [])
-        .map((r) => ({
-          Date: (r.Date || r.date || '').trim(),
-          Time: (r.Time || r.time || '').trim(),
+      .map((r) => {
+        const rawDate = (r.Date || r.date || '').trim();
+        const rawTime = (r.Time || r.time || '').trim();
+        return {
+          Date: normalizeDateText(rawDate),
+          Time: normalizeTimeText(rawTime),
           City: (r.City || r.city || '').trim(),
           Venue: (r.Venue || r.venue || r['Venue/Show Name'] || '').trim(),
           Ticket: (r.Ticket || r.ticket || r.Link || r['Ticket Link'] || '').trim(),
           Status: (r.Status || r.status || '').trim(),
-        }))
+        };
+      })      
         .filter((r) => r.Date && r.Time)
         .filter((r) => {
           const dt = parseDate(r.Date, r.Time);

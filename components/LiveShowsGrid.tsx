@@ -2,15 +2,41 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 /**
- * LIMITED HANGOUT — LIVE SHOWS GRID (v2)
- * Three columns (Devin, Pat, Matt) pulling shows from three Google Sheets tabs.
+ * LIMITED HANGOUT — LIVE SHOWS GRID
+ * Pulls three tabs (Devin, Pat, Matt) from the published Google Sheet (CSV endpoint).
+ * Your sheet is published at the /d/e/.../pub... URL, so we use that instead of gviz.
  */
 
-const SPREADSHEET_ID = '1m2nJyd_UkN0DJtWOtRW1ZbeXX5Xqc-g5XVkwvBvHqUY';
 const DEMO_MODE = false;
 
+// this is the published link you sent, turned into a base for each tab
 const PUBLISHED_BASE =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vRVtnWrYtSM5a5KMeb_k7qIukbJbnkoMqRhFDgJ60I2obN1pycbQo4E-SchhDDhZL3UqCU9N_A_LNFM/pub?output=csv&sheet=';
+
+// a tiny CSV line parser that can handle commas inside quotes
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
 
 async function fetchSheetTab(sheetName: string) {
   try {
@@ -18,53 +44,28 @@ async function fetchSheetTab(sheetName: string) {
     const res = await fetch(url, { cache: 'no-store' });
     const text = await res.text();
 
-    // 👇 Log what’s coming back from Google
+    // log the first part so you can see what came back
     console.log(`CSV for ${sheetName}:`, text.slice(0, 200));
 
-    // Split CSV lines
-    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    // split into lines
+    const lines = text
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
     if (lines.length === 0) return [];
 
-    // First line = headers
-    const headers = lines[0].split(',').map((h) => h.trim());
+    // first line = headers
+    const headers = parseCsvLine(lines[0]);
 
-    // Convert each row to an object
     const rows = lines.slice(1).map((line) => {
-      const cells = line.split(',');
+      const cells = parseCsvLine(line);
       const obj: Record<string, string> = {};
       headers.forEach((h, i) => {
         obj[h] = (cells[i] ?? '').trim();
       });
       return obj;
     });
-
-    return rows as {
-      Date: string;
-      Time: string;
-      City: string;
-      Venue: string;
-      Ticket: string;
-      Status?: string;
-    }[];
-  } catch (err) {
-    console.error('Sheet fetch failed', err);
-    return [];
-  }
-}
-    const headers = table.cols.map((c: any) => (c && c.label ? c.label.trim() : ''));
-
-    const rows = table.rows
-      .map((r: any) => r.c)
-      .filter(Boolean)
-      .map((cells: any[]) => {
-        const obj: Record<string, string> = {};
-        headers.forEach((h: string, i: number) => {
-          const cell = cells[i];
-          const raw = cell ? (cell.f ?? cell.v) : '';
-          obj[h] = raw != null ? String(raw).trim() : '';
-        });
-        return obj;
-      });
 
     return rows as {
       Date: string;
@@ -88,17 +89,20 @@ function normalizeDateText(input: string) {
   if (!input) return input;
   const trimmed = input.trim();
 
+  // gviz-style date (we may not need this anymore, but it’s safe to keep)
   const m = /^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2})/.exec(trimmed);
   if (m) {
     const [_, y, mth, d] = m;
     return `${y}-${pad2(Number(mth) + 1)}-${pad2(d)}`;
   }
 
+  // MM/DD/YYYY
   const mdy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
   if (mdy) {
     const [_, mm, dd, yyyy] = mdy;
     return `${yyyy}-${pad2(mm)}-${pad2(dd)}`;
   }
+
   return trimmed;
 }
 
@@ -106,6 +110,7 @@ function normalizeTimeText(input: string) {
   if (!input) return input;
   const trimmed = input.trim();
 
+  // gviz-style datetime
   const m = /^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2})\)/.exec(trimmed);
   if (m) {
     let [, , , , hh, mm] = m;
@@ -114,6 +119,7 @@ function normalizeTimeText(input: string) {
     H = H % 12 || 12;
     return `${H}:${pad2(mm)} ${ampm}`;
   }
+
   return trimmed;
 }
 
@@ -219,7 +225,6 @@ export default function LiveShowsGrid() {
   const [data, setData] = useState({ Devin: [], Pat: [], Matt: [] } as Record<string, any[]>);
   const [loading, setLoading] = useState(!DEMO_MODE);
   const [error, setError] = useState('');
-
   const [selectedMonth, setSelectedMonth] = useState('all');
   const [selectedCity, setSelectedCity] = useState('all');
 
@@ -275,9 +280,9 @@ export default function LiveShowsGrid() {
             Status: (r.Status ?? r.status ?? '').trim(),
           };
         })
-        .filter((r) => r.Date) // only require date
+        .filter((r) => r.Date) // at least have a date
         .filter((r) => {
-          // only drop past shows if we can parse
+          // only drop past shows if we can actually parse date+time
           const dt = r.Time ? parseDate(r.Date, r.Time) : null;
           if (!dt) return true;
           const today = new Date();
@@ -299,6 +304,96 @@ export default function LiveShowsGrid() {
   }, [data]);
 
   const filterOptions = useMemo(() => {
-    const all = [...normalized.Devi
+    const all = [...normalized.Devin, ...normalized.Pat, ...normalized.Matt];
+    const monthsSet = new Set<string>();
+    const citiesSet = new Set<string>();
+
+    for (const s of all) {
+      const dt = s.Time ? parseDate(s.Date, s.Time) : null;
+      if (dt) monthsSet.add(monthKey(dt));
+      if (s.City) citiesSet.add(s.City);
+    }
+
+    const months = Array.from(monthsSet).sort();
+    const cities = Array.from(citiesSet).sort((a, b) => a.localeCompare(b));
+
+    return { months, cities };
+  }, [normalized]);
+
+  const finalData = useMemo(() => {
+    function byFilters(arr: any[]) {
+      return arr.filter((s) => {
+        const dt = s.Time ? parseDate(s.Date, s.Time) : null;
+        const mk = dt ? monthKey(dt) : '';
+        const monthOk = selectedMonth === 'all' || mk === selectedMonth;
+        const cityOk = selectedCity === 'all' || s.City === selectedCity;
+        return monthOk && cityOk;
+      });
+    }
+
+    return {
+      Devin: byFilters(normalized.Devin),
+      Pat: byFilters(normalized.Pat),
+      Matt: byFilters(normalized.Matt),
+    };
+  }, [normalized, selectedMonth, selectedCity]);
+
+  return (
+    <div className="max-w-6xl mx-auto p-4 md:p-8">
+      <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Live Shows</h1>
+        {loading && <span className="text-sm text-gray-500">Loading…</span>}
+        {error && <span className="text-sm text-red-600">{error}</span>}
+      </div>
+
+      {/* Filters */}
+      <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-gray-700">Month</span>
+          <select
+            className="w-full rounded-xl border border-gray-300 p-2"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+          >
+            <option value="all">All months</option>
+            {filterOptions.months.map((m) => (
+              <option key={m} value={m}>
+                {monthLabel(m)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-gray-700">City</span>
+          <select
+            className="w-full rounded-xl border border-gray-300 p-2"
+            value={selectedCity}
+            onChange={(e) => setSelectedCity(e.target.value)}
+          >
+            <option value="all">All cities</option>
+            {filterOptions.cities.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="flex items-end">
+          <button
+            className="rounded-xl border px-3 py-2 text-sm shadow-sm hover:shadow border-gray-300"
+            onClick={() => {
+              setSelectedMonth('all');
+              setSelectedCity('all');
+            }}
+          >
+            Reset filters
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Column title="Devin" shows={finalData.Devi
 
 ::contentReference[oaicite:0]{index=0}

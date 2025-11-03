@@ -3,19 +3,19 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 /**
  * LIMITED HANGOUT — LIVE SHOWS GRID
- * Pulls three tabs (Devin, Pat, Matt) from the published Google Sheet.
- * Sheet is published at the /d/e/.../pub... URL, so we read CSV, not gviz.
+ * Reads 3 tabs (Devin, Pat, Matt) from your published CSV sheet.
+ * This version NEVER calls JSON.parse on the sheet response.
  */
 
 const DEMO_MODE = false;
 
-// published base you shared
+// your published sheet base:
 const PUBLISHED_BASE =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vRVtnWrYtSM5a5KMeb_k7qIukbJbnkoMqRhFDgJ60I2obN1pycbQo4E-SchhDDhZL3UqCU9N_A_LNFM/pub?output=csv&sheet=';
 
-// small CSV parser that handles commas inside quotes
+// CSV parser that handles "Washington, DC"
 function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
+  const out: string[] = [];
   let cur = '';
   let inQuotes = false;
 
@@ -23,7 +23,7 @@ function parseCsvLine(line: string): string[] {
     const ch = line[i];
 
     if (ch === '"') {
-      // toggle quote state, handle "" as escaped "
+      // handle doubled quotes ("")
       if (inQuotes && line[i + 1] === '"') {
         cur += '"';
         i++;
@@ -34,34 +34,38 @@ function parseCsvLine(line: string): string[] {
     }
 
     if (ch === ',' && !inQuotes) {
-      result.push(cur.trim());
+      out.push(cur.trim());
       cur = '';
     } else {
       cur += ch;
     }
   }
-  result.push(cur.trim());
-  return result;
+  out.push(cur.trim());
+  return out;
 }
 
-// fetch one tab from the published sheet
 async function fetchSheetTab(sheetName: string) {
   try {
     const url = PUBLISHED_BASE + encodeURIComponent(sheetName);
     const res = await fetch(url, { cache: 'no-store' });
     const text = await res.text();
 
+    // log what we actually got
     console.log(`CSV for ${sheetName}:`, text.slice(0, 200));
 
-    // split into lines
+    // if Google ever sends HTML (login page), bail out
+    if (text.toLowerCase().includes('<html')) {
+      console.warn(`Sheet ${sheetName} returned HTML (not public?)`);
+      return [];
+    }
+
     const lines = text
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
 
-    if (lines.length === 0) return [];
+    if (!lines.length) return [];
 
-    // first non-empty = headers
     const headers = parseCsvLine(lines[0]);
 
     const rows = lines.slice(1).map((line) => {
@@ -95,7 +99,7 @@ function normalizeDateText(input: string) {
   if (!input) return input;
   const trimmed = input.trim();
 
-  // gviz-style date
+  // gviz-style
   const m = /^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2})/.exec(trimmed);
   if (m) {
     const [_, y, mth, d] = m;
@@ -131,7 +135,6 @@ function normalizeTimeText(input: string) {
 
 function parseDate(dateStr: string, timeStr: string) {
   if (!dateStr || !timeStr) return null;
-
   const mDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
   const mTime = /^(\d{1,2}):(\d{2})\s*([AP]M)$/i.exec(timeStr.trim());
   if (!mDate || !mTime) return null;
@@ -150,17 +153,13 @@ function parseDate(dateStr: string, timeStr: string) {
 }
 
 function formatNice(dt: Date) {
-  try {
-    return new Intl.DateTimeFormat('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(dt);
-  } catch {
-    return '';
-  }
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(dt);
 }
 
 function monthKey(dt: Date) {
@@ -286,9 +285,8 @@ export default function LiveShowsGrid() {
             Status: (r.Status ?? r.status ?? '').trim(),
           };
         })
-        .filter((r) => r.Date) // at least a date
+        .filter((r) => r.Date)
         .filter((r) => {
-          // drop past shows only if we can parse full datetime
           const dt = r.Time ? parseDate(r.Date, r.Time) : null;
           if (!dt) return true;
           const today = new Date();
@@ -320,10 +318,10 @@ export default function LiveShowsGrid() {
       if (s.City) citiesSet.add(s.City);
     }
 
-    const months = Array.from(monthsSet).sort();
-    const cities = Array.from(citiesSet).sort((a, b) => a.localeCompare(b));
-
-    return { months, cities };
+    return {
+      months: Array.from(monthsSet).sort(),
+      cities: Array.from(citiesSet).sort((a, b) => a.localeCompare(b)),
+    };
   }, [normalized]);
 
   const finalData = useMemo(() => {
@@ -336,7 +334,6 @@ export default function LiveShowsGrid() {
         return monthOk && cityOk;
       });
     }
-
     return {
       Devin: byFilters(normalized.Devin),
       Pat: byFilters(normalized.Pat),
@@ -403,16 +400,6 @@ export default function LiveShowsGrid() {
         <Column title="Devin" shows={finalData.Devin} />
         <Column title="Pat" shows={finalData.Pat} />
         <Column title="Matt" shows={finalData.Matt} />
-      </div>
-
-      <div className="mt-8 text-xs text-gray-500 space-y-1">
-        <p>Update any of the three tabs in Google Sheets and this page will reflect the changes automatically.</p>
-        <p>
-          Required headers: <span className="font-mono">Date</span>, <span className="font-mono">Time</span>,{' '}
-          <span className="font-mono">City</span>, <span className="font-mono">Venue</span>,{' '}
-          <span className="font-mono">Ticket</span>. Optional: <span className="font-mono">Status</span> (set to{' '}
-          <span className="font-mono">Sold Out</span> to show a badge and disable the link).
-        </p>
       </div>
     </div>
   );

@@ -258,41 +258,49 @@ export default function LiveShowsGrid() {
     const src = data;
     const now = new Date();
   
-    function normalize(arr: any[]) {
-      return (arr || [])
-        .map((r) => {
-          const rawDate = (r.Date ?? r.date ?? '').trim();
-          const rawTime = (r.Time ?? r.time ?? '').trim();
-          return {
-            Date: normalizeDateText(rawDate),
-            Time: normalizeTimeText(rawTime),
-            City: (r.City ?? r.city ?? '').trim(),
-            Venue: (r.Venue ?? r.venue ?? r['Venue/Show Name'] ?? '').trim(),
-            Ticket: (
-              r.Ticket ??
-              r.Tickets ??
-              r.ticket ??
-              r.tickets ??
-              r.Link ??
-              r['Ticket Link'] ??
-              r['Buy Link'] ??
-              ''
-            ).trim(),
-            Status: (r.Status ?? r.status ?? '').trim(),
-          };
-        })
-        .filter((r) => r.Date && r.Time)
-        .filter((r) => {
-          const dt = parseDate(r.Date, r.Time);
-          // Only keep today or future
-          return dt && dt >= new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        })
-        .sort((a, b) => {
-          const da = parseDate(a.Date, a.Time)?.getTime() ?? 0;
-          const db = parseDate(b.Date, b.Time)?.getTime() ?? 0;
-          return da - db;
-        });
-    }
+function normalize(arr: any[]) {
+  return (arr || [])
+    .map((r) => {
+      const rawDate = (r.Date ?? r.date ?? '').trim();
+      const rawTime = (r.Time ?? r.time ?? '').trim();
+      const normalizedDate = normalizeDateText(rawDate);
+      const normalizedTime = normalizeTimeText(rawTime);
+
+      return {
+        Date: normalizedDate,
+        Time: normalizedTime,
+        City: (r.City ?? r.city ?? '').trim(),
+        Venue: (r.Venue ?? r.venue ?? r['Venue/Show Name'] ?? '').trim(),
+        Ticket: (
+          r.Ticket ??
+          r.Tickets ??
+          r.ticket ??
+          r.tickets ??
+          r.Link ??
+          r['Ticket Link'] ??
+          r['Buy Link'] ??
+          ''
+        ).trim(),
+        Status: (r.Status ?? r.status ?? '').trim(),
+      };
+    })
+    // keep rows that at least have a Date
+    .filter((r) => r.Date)
+    // OPTIONAL: only drop clearly past shows *if* we can parse them
+    .filter((r) => {
+      const dt = r.Time ? parseDate(r.Date, r.Time) : null;
+      if (!dt) return true; // if we can’t parse, don’t throw it out
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      return dt >= todayStart;
+    })
+    .sort((a, b) => {
+      const da = a.Time ? parseDate(a.Date, a.Time)?.getTime() ?? 0 : 0;
+      const db = b.Time ? parseDate(b.Date, b.Time)?.getTime() ?? 0 : 0;
+      return da - db;
+    });
+}
+
   
     return {
       Devin: normalize(src.Devin),

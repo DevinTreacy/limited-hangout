@@ -4,16 +4,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 /**
  * LIMITED HANGOUT — LIVE SHOWS GRID
  * Reads 3 tabs (Devin, Pat, Matt) from your published CSV sheet.
- * This version NEVER calls JSON.parse on the sheet response.
+ * Updated for dark theme readability and modern styling.
  */
 
 const DEMO_MODE = false;
-
-// your published sheet base:
 const PUBLISHED_BASE =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vRVtnWrYtSM5a5KMeb_k7qIukbJbnkoMqRhFDgJ60I2obN1pycbQo4E-SchhDDhZL3UqCU9N_A_LNFM/pub?output=csv&sheet=';
 
-// CSV parser that handles "Washington, DC"
+// CSV parser that handles commas inside quotes
 function parseCsvLine(line: string): string[] {
   const out: string[] = [];
   let cur = '';
@@ -21,9 +19,7 @@ function parseCsvLine(line: string): string[] {
 
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-
     if (ch === '"') {
-      // handle doubled quotes ("")
       if (inQuotes && line[i + 1] === '"') {
         cur += '"';
         i++;
@@ -32,7 +28,6 @@ function parseCsvLine(line: string): string[] {
       }
       continue;
     }
-
     if (ch === ',' && !inQuotes) {
       out.push(cur.trim());
       cur = '';
@@ -50,24 +45,17 @@ async function fetchSheetTab(sheetName: string) {
     const res = await fetch(url, { cache: 'no-store' });
     const text = await res.text();
 
-    // log what we actually got
     console.log(`CSV for ${sheetName}:`, text.slice(0, 200));
 
-    // if Google ever sends HTML (login page), bail out
     if (text.toLowerCase().includes('<html')) {
       console.warn(`Sheet ${sheetName} returned HTML (not public?)`);
       return [];
     }
 
-    const lines = text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0);
-
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
     if (!lines.length) return [];
 
     const headers = parseCsvLine(lines[0]);
-
     const rows = lines.slice(1).map((line) => {
       const cells = parseCsvLine(line);
       const obj: Record<string, string> = {};
@@ -98,38 +86,11 @@ function pad2(n: number | string) {
 function normalizeDateText(input: string) {
   if (!input) return input;
   const trimmed = input.trim();
-
-  // gviz-style
-  const m = /^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2})/.exec(trimmed);
-  if (m) {
-    const [_, y, mth, d] = m;
-    return `${y}-${pad2(Number(mth) + 1)}-${pad2(d)}`;
-  }
-
-  // MM/DD/YYYY
   const mdy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
   if (mdy) {
     const [_, mm, dd, yyyy] = mdy;
     return `${yyyy}-${pad2(mm)}-${pad2(dd)}`;
   }
-
-  return trimmed;
-}
-
-function normalizeTimeText(input: string) {
-  if (!input) return input;
-  const trimmed = input.trim();
-
-  // gviz-style datetime
-  const m = /^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2})\)/.exec(trimmed);
-  if (m) {
-    let [, , , , hh, mm] = m;
-    let H = Number(hh);
-    const ampm = H >= 12 ? 'PM' : 'AM';
-    H = H % 12 || 12;
-    return `${H}:${pad2(mm)} ${ampm}`;
-  }
-
   return trimmed;
 }
 
@@ -143,12 +104,11 @@ function parseDate(dateStr: string, timeStr: string) {
   let [, hh, mm, ampm] = mTime;
   let H = parseInt(hh, 10);
   const M = parseInt(mm, 10);
-
   ampm = ampm.toUpperCase();
   if (ampm === 'PM' && H !== 12) H += 12;
   if (ampm === 'AM' && H === 12) H = 0;
 
-  const dt = new Date(Number(y), Number(m) - 1, Number(d), H, M, 0, 0);
+  const dt = new Date(Number(y), Number(m) - 1, Number(d), H, M);
   return isNaN(dt.getTime()) ? null : dt;
 }
 
@@ -165,7 +125,6 @@ function formatNice(dt: Date) {
 function monthKey(dt: Date) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
 }
-
 function monthLabel(key: string) {
   const [y, m] = key.split('-').map(Number);
   const date = new Date(y, m - 1, 1);
@@ -179,29 +138,29 @@ function ShowCard({ show }: { show: any }) {
 
   return (
     <div
-      className={`relative block rounded-2xl border p-4 shadow-sm transition-shadow ${
-        sold ? 'opacity-80' : 'hover:shadow-md'
-      } border-gray-200`}
+      className={`relative block rounded-2xl border border-gray-700 bg-gray-900 p-4 shadow-md transition-transform duration-150 ${
+        sold ? 'opacity-70' : 'hover:-translate-y-1 hover:shadow-lg hover:border-gray-500'
+      }`}
     >
       {sold && (
-        <div className="absolute right-3 top-3 rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-gray-100 border-gray-300">
+        <div className="absolute right-3 top-3 rounded-full border border-gray-600 bg-gray-800 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-gray-300">
           Sold Out
         </div>
       )}
-      <div className="text-sm text-gray-500">{nice}</div>
-      <div className="mt-1 font-semibold text-base leading-snug">{show.Venue || 'Show'}</div>
-      <div className="text-sm text-gray-600">{show.City}</div>
+      <div className="text-sm text-gray-400">{nice}</div>
+      <div className="mt-1 font-semibold text-lg text-gray-100 leading-snug">{show.Venue || 'Show'}</div>
+      <div className="text-sm text-gray-400">{show.City}</div>
       {show.Ticket && !sold ? (
         <a
           href={show.Ticket}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-2 inline-block text-sm underline"
+          className="mt-2 inline-block text-sm underline text-blue-400 hover:text-blue-300"
         >
           Buy tickets
         </a>
       ) : (
-        <div className="mt-2 text-sm text-gray-400">
+        <div className="mt-2 text-sm text-gray-500">
           {sold ? 'No tickets available' : 'Details coming soon'}
         </div>
       )}
@@ -212,7 +171,7 @@ function ShowCard({ show }: { show: any }) {
 function Column({ title, shows }: { title: string; shows: any[] }) {
   return (
     <div className="space-y-3">
-      <h2 className="text-xl text-gray-900 font-bold tracking-tight">{title}</h2>
+      <h2 className="text-xl font-bold text-white tracking-tight">{title}</h2>
       {shows && shows.length > 0 ? (
         <div className="grid gap-3">
           {shows.map((s, i) => (
@@ -258,66 +217,41 @@ export default function LiveShowsGrid() {
     };
   }, []);
 
-  const normalized = useMemo(() => {
-    function normalize(arr: any[]) {
-      return (arr || [])
-        .map((r) => {
-          const rawDate = (r.Date ?? r.date ?? '').trim();
-          const rawTime = (r.Time ?? r.time ?? '').trim();
-          const normalizedDate = normalizeDateText(rawDate);
-          const normalizedTime = normalizeTimeText(rawTime);
+  const normalize = (arr: any[]) =>
+    (arr || [])
+      .map((r) => ({
+        Date: (r.Date ?? '').trim(),
+        Time: (r.Time ?? '').trim(),
+        City: (r.City ?? '').trim(),
+        Venue: (r.Venue ?? r['Venue/Show Name'] ?? '').trim(),
+        Ticket: (r.Ticket ?? '').trim(),
+        Status: (r.Status ?? '').trim(),
+      }))
+      .filter((r) => r.Date)
+      .sort((a, b) => {
+        const da = parseDate(a.Date, a.Time)?.getTime() ?? 0;
+        const db = parseDate(b.Date, b.Time)?.getTime() ?? 0;
+        return da - db;
+      });
 
-          return {
-            Date: normalizedDate,
-            Time: normalizedTime,
-            City: (r.City ?? r.city ?? '').trim(),
-            Venue: (r.Venue ?? r.venue ?? r['Venue/Show Name'] ?? '').trim(),
-            Ticket: (
-              r.Ticket ??
-              r.Tickets ??
-              r.ticket ??
-              r.tickets ??
-              r.Link ??
-              r['Ticket Link'] ??
-              r['Buy Link'] ??
-              ''
-            ).trim(),
-            Status: (r.Status ?? r.status ?? '').trim(),
-          };
-        })
-        .filter((r) => r.Date)
-        .filter((r) => {
-          const dt = r.Time ? parseDate(r.Date, r.Time) : null;
-          if (!dt) return true;
-          const today = new Date();
-          const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-          return dt >= todayStart;
-        })
-        .sort((a, b) => {
-          const da = a.Time ? parseDate(a.Date, a.Time)?.getTime() ?? 0 : 0;
-          const db = b.Time ? parseDate(b.Date, b.Time)?.getTime() ?? 0 : 0;
-          return da - db;
-        });
-    }
-
-    return {
+  const normalized = useMemo(
+    () => ({
       Devin: normalize(data.Devin),
       Pat: normalize(data.Pat),
       Matt: normalize(data.Matt),
-    };
-  }, [data]);
+    }),
+    [data]
+  );
 
   const filterOptions = useMemo(() => {
     const all = [...normalized.Devin, ...normalized.Pat, ...normalized.Matt];
     const monthsSet = new Set<string>();
     const citiesSet = new Set<string>();
-
     for (const s of all) {
       const dt = s.Time ? parseDate(s.Date, s.Time) : null;
       if (dt) monthsSet.add(monthKey(dt));
       if (s.City) citiesSet.add(s.City);
     }
-
     return {
       months: Array.from(monthsSet).sort(),
       cities: Array.from(citiesSet).sort((a, b) => a.localeCompare(b)),
@@ -342,19 +276,19 @@ export default function LiveShowsGrid() {
   }, [normalized, selectedMonth, selectedCity]);
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8">
+    <div className="max-w-6xl mx-auto p-4 md:p-8 text-gray-100">
       <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Live Shows</h1>
-        {loading && <span className="text-sm text-gray-500">Loading…</span>}
-        {error && <span className="text-sm text-red-600">{error}</span>}
+        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white">Live Shows</h1>
+        {loading && <span className="text-sm text-gray-400">Loading…</span>}
+        {error && <span className="text-sm text-red-400">{error}</span>}
       </div>
 
       {/* Filters */}
       <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-gray-700">Month</span>
+          <span className="mb-1 block text-sm font-medium text-gray-300">Month</span>
           <select
-            className="w-full rounded-xl border border-gray-300 p-2"
+            className="w-full rounded-xl border border-gray-500 bg-gray-800 text-gray-100 p-2 focus:border-white focus:ring-white"
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
           >
@@ -368,9 +302,9 @@ export default function LiveShowsGrid() {
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-gray-700">City</span>
+          <span className="mb-1 block text-sm font-medium text-gray-300">City</span>
           <select
-            className="w-full rounded-xl border border-gray-300 p-2"
+            className="w-full rounded-xl border border-gray-500 bg-gray-800 text-gray-100 p-2 focus:border-white focus:ring-white"
             value={selectedCity}
             onChange={(e) => setSelectedCity(e.target.value)}
           >
@@ -385,7 +319,7 @@ export default function LiveShowsGrid() {
 
         <div className="flex items-end">
           <button
-            className="rounded-xl border px-3 py-2 text-sm shadow-sm hover:shadow border-gray-300"
+            className="rounded-xl border border-gray-500 px-3 py-2 text-sm shadow-sm hover:bg-gray-700 text-gray-100"
             onClick={() => {
               setSelectedMonth('all');
               setSelectedCity('all');

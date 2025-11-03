@@ -286,7 +286,7 @@ export default function LiveShowsGrid() {
       {/* Filters */}
       <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-gray-300">Month</span>
+          <span className="mb-1 block text-sm font-medium text-white-300">Month</span>
           <select
             className="w-full rounded-xl border border-gray-500 bg-gray-800 text-gray-100 p-2 focus:border-white focus:ring-white"
             value={selectedMonth}
@@ -302,7 +302,7 @@ export default function LiveShowsGrid() {
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-gray-300">City</span>
+          <span className="mb-1 block text-sm font-medium text-white-300">City</span>
           <select
             className="w-full rounded-xl border border-gray-500 bg-gray-800 text-gray-100 p-2 focus:border-white focus:ring-white"
             value={selectedCity}

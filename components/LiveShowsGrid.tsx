@@ -31,14 +31,22 @@ async function fetchSheetTab(sheetName: string) {
       sheetName
     )}&headers=1&tqx=out:json`;
 
-    // no-store prevents stale caching while you’re testing
     const res = await fetch(url, { cache: 'no-store' });
     const text = await res.text();
+
+    // 👇 NEW: log what came back
+    console.log(`Response for ${sheetName} tab:`, text.slice(0, 300));
 
     // gviz returns JS-wrapped JSON; unwrap it
     const json = JSON.parse(
       text.replace(/^.*setResponse\(/, '').replace(/\);\s*$/, '')
     );
+
+    const table = json.table;
+    if (!table || !table.cols || !table.rows) {
+      console.warn(`No data found for ${sheetName}`);
+      return [];
+    }
     const table = json.table;
     if (!table || !table.cols || !table.rows) return [];
 

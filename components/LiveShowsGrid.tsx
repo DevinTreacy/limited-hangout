@@ -3,59 +3,65 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 /**
  * LIMITED HANGOUT — LIVE SHOWS GRID
- * Pulls three tabs (Devin, Pat, Matt) from the published Google Sheet (CSV endpoint).
- * Your sheet is published at the /d/e/.../pub... URL, so we use that instead of gviz.
+ * Pulls three tabs (Devin, Pat, Matt) from the published Google Sheet.
+ * Sheet is published at the /d/e/.../pub... URL, so we read CSV, not gviz.
  */
 
 const DEMO_MODE = false;
 
-// this is the published link you sent, turned into a base for each tab
+// published base you shared
 const PUBLISHED_BASE =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vRVtnWrYtSM5a5KMeb_k7qIukbJbnkoMqRhFDgJ60I2obN1pycbQo4E-SchhDDhZL3UqCU9N_A_LNFM/pub?output=csv&sheet=';
 
-// a tiny CSV line parser that can handle commas inside quotes
+// small CSV parser that handles commas inside quotes
 function parseCsvLine(line: string): string[] {
   const result: string[] = [];
-  let current = '';
+  let cur = '';
   let inQuotes = false;
 
   for (let i = 0; i < line.length; i++) {
-    const char = line[i];
+    const ch = line[i];
 
-    if (char === '"') {
-      inQuotes = !inQuotes;
+    if (ch === '"') {
+      // toggle quote state, handle "" as escaped "
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
       continue;
     }
 
-    if (char === ',' && !inQuotes) {
-      result.push(current.trim());
-      current = '';
+    if (ch === ',' && !inQuotes) {
+      result.push(cur.trim());
+      cur = '';
     } else {
-      current += char;
+      cur += ch;
     }
   }
-  result.push(current.trim());
+  result.push(cur.trim());
   return result;
 }
 
+// fetch one tab from the published sheet
 async function fetchSheetTab(sheetName: string) {
   try {
     const url = PUBLISHED_BASE + encodeURIComponent(sheetName);
     const res = await fetch(url, { cache: 'no-store' });
     const text = await res.text();
 
-    // log the first part so you can see what came back
     console.log(`CSV for ${sheetName}:`, text.slice(0, 200));
 
     // split into lines
     const lines = text
-      .split('\n')
+      .split(/\r?\n/)
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
 
     if (lines.length === 0) return [];
 
-    // first line = headers
+    // first non-empty = headers
     const headers = parseCsvLine(lines[0]);
 
     const rows = lines.slice(1).map((line) => {
@@ -89,7 +95,7 @@ function normalizeDateText(input: string) {
   if (!input) return input;
   const trimmed = input.trim();
 
-  // gviz-style date (we may not need this anymore, but it’s safe to keep)
+  // gviz-style date
   const m = /^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2})/.exec(trimmed);
   if (m) {
     const [_, y, mth, d] = m;
@@ -280,9 +286,9 @@ export default function LiveShowsGrid() {
             Status: (r.Status ?? r.status ?? '').trim(),
           };
         })
-        .filter((r) => r.Date) // at least have a date
+        .filter((r) => r.Date) // at least a date
         .filter((r) => {
-          // only drop past shows if we can actually parse date+time
+          // drop past shows only if we can parse full datetime
           const dt = r.Time ? parseDate(r.Date, r.Time) : null;
           if (!dt) return true;
           const today = new Date();
@@ -394,6 +400,20 @@ export default function LiveShowsGrid() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Column title="Devin" shows={finalData.Devi
+        <Column title="Devin" shows={finalData.Devin} />
+        <Column title="Pat" shows={finalData.Pat} />
+        <Column title="Matt" shows={finalData.Matt} />
+      </div>
 
-::contentReference[oaicite:0]{index=0}
+      <div className="mt-8 text-xs text-gray-500 space-y-1">
+        <p>Update any of the three tabs in Google Sheets and this page will reflect the changes automatically.</p>
+        <p>
+          Required headers: <span className="font-mono">Date</span>, <span className="font-mono">Time</span>,{' '}
+          <span className="font-mono">City</span>, <span className="font-mono">Venue</span>,{' '}
+          <span className="font-mono">Ticket</span>. Optional: <span className="font-mono">Status</span> (set to{' '}
+          <span className="font-mono">Sold Out</span> to show a badge and disable the link).
+        </p>
+      </div>
+    </div>
+  );
+}

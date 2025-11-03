@@ -4,25 +4,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 /**
  * LIMITED HANGOUT — LIVE SHOWS GRID (v2)
  * Three columns (Devin, Pat, Matt) pulling shows from three Google Sheets tabs.
- * Adds: Month & City filters + SOLD OUT badge.
- *
- * GOOGLE SHEETS SETUP
- * 1) One Google Sheet with THREE tabs named exactly: Devin, Pat, Matt
- * 2) Headers in row 1 (case-sensitive):
- *    Date | Time | City | Venue | Ticket | Status (optional)
- *    - Date: YYYY-MM-DD (e.g., 2025-11-05)
- *    - Time: 7:30 PM
- *    - City: Washington, DC
- *    - Venue: DC Improv (or show name)
- *    - Ticket: full URL to buy page (leave blank if none)
- *    - Status: "Sold Out" to show a badge and disable the Buy link (optional)
- * 3) Share → Anyone with the link (Viewer)
- * 4) File → Share → Publish to web → Entire document → Publish
- * 5) Copy the Spreadsheet ID from the URL (between /d/ and /edit)
- * 6) Replace SPREADSHEET_ID below
  */
 
-const SPREADSHEET_ID = "1m2nJyd_UkN0DJtWOtRW1ZbeXX5Xqc-g5XVkwvBvHqUY";
+const SPREADSHEET_ID = '1m2nJyd_UkN0DJtWOtRW1ZbeXX5Xqc-g5XVkwvBvHqUY';
 const DEMO_MODE = false;
 
 async function fetchSheetTab(sheetName: string) {
@@ -34,10 +18,10 @@ async function fetchSheetTab(sheetName: string) {
     const res = await fetch(url, { cache: 'no-store' });
     const text = await res.text();
 
-    // 👇 NEW: log what came back
+    // log what we got
     console.log(`Response for ${sheetName} tab:`, text.slice(0, 300));
 
-    // gviz returns JS-wrapped JSON; unwrap it
+    // unwrap gviz JSON
     const json = JSON.parse(
       text.replace(/^.*setResponse\(/, '').replace(/\);\s*$/, '')
     );
@@ -47,8 +31,6 @@ async function fetchSheetTab(sheetName: string) {
       console.warn(`No data found for ${sheetName}`);
       return [];
     }
-    const table = json.table;
-    if (!table || !table.cols || !table.rows) return [];
 
     const headers = table.cols.map((c: any) => (c && c.label ? c.label.trim() : ''));
 
@@ -59,11 +41,9 @@ async function fetchSheetTab(sheetName: string) {
         const obj: Record<string, string> = {};
         headers.forEach((h: string, i: number) => {
           const cell = cells[i];
-          // Prefer formatted string (f) if available; fallback to raw (v)
           const raw = cell ? (cell.f ?? cell.v) : '';
           obj[h] = raw != null ? String(raw).trim() : '';
         });
-        
         return obj;
       });
 
@@ -85,26 +65,16 @@ function pad2(n: number | string) {
   return String(n).padStart(2, '0');
 }
 
-// Handles gviz Date(YYYY,MM,DD[,HH,mm,ss])
-function parseGvizDateToken(token: string) {
-  const m = /^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2})(?:,\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2}))?\)$/.exec(token);
-  if (!m) return null;
-  const [_, y, mth, d, hh = '0', mm = '0', ss = '0'] = m;
-  return new Date(Number(y), Number(mth), Number(d), Number(hh), Number(mm), Number(ss));
-}
-
 function normalizeDateText(input: string) {
   if (!input) return input;
   const trimmed = input.trim();
 
-  // Detect Google gviz Date(YYYY,MM,DD,...)
   const m = /^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2})/.exec(trimmed);
   if (m) {
     const [_, y, mth, d] = m;
     return `${y}-${pad2(Number(mth) + 1)}-${pad2(d)}`;
   }
 
-  // Handles MM/DD/YYYY
   const mdy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
   if (mdy) {
     const [_, mm, dd, yyyy] = mdy;
@@ -117,20 +87,18 @@ function normalizeTimeText(input: string) {
   if (!input) return input;
   const trimmed = input.trim();
 
-  // Detect gviz Date(YYYY,MM,DD,HH,MM,SS)
   const m = /^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2}),\s*(\d{1,2})\)/.exec(trimmed);
   if (m) {
     let [, , , , hh, mm] = m;
-    hh = Number(hh);
-    const ampm = hh >= 12 ? 'PM' : 'AM';
-    hh = hh % 12 || 12;
-    return `${hh}:${pad2(mm)} ${ampm}`;
+    let H = Number(hh);
+    const ampm = H >= 12 ? 'PM' : 'AM';
+    H = H % 12 || 12;
+    return `${H}:${pad2(mm)} ${ampm}`;
   }
   return trimmed;
 }
 
 function parseDate(dateStr: string, timeStr: string) {
-  // dateStr: "YYYY-MM-DD", timeStr: "h:mm AM/PM"
   if (!dateStr || !timeStr) return null;
 
   const mDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
@@ -165,7 +133,7 @@ function formatNice(dt: Date) {
 }
 
 function monthKey(dt: Date) {
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`; // e.g., 2025-11
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function monthLabel(key: string) {
@@ -175,8 +143,8 @@ function monthLabel(key: string) {
 }
 
 function ShowCard({ show }: { show: any }) {
-  const dt = parseDate(show.Date, show.Time);
-  const nice = dt ? formatNice(dt) : `${show.Date} ${show.Time}`;
+  const dt = show.Time ? parseDate(show.Date, show.Time) : null;
+  const nice = dt ? formatNice(dt) : show.Date;
   const sold = /sold\s*out/i.test(show.Status || '');
 
   return (
@@ -214,7 +182,7 @@ function ShowCard({ show }: { show: any }) {
 function Column({ title, shows }: { title: string; shows: any[] }) {
   return (
     <div className="space-y-3">
-      <h2 className="text-xl font-bold tracking-tight">{title}</h2>
+      <h2 className="text-xl text-gray-900 font-bold tracking-tight">{title}</h2>
       {shows && shows.length > 0 ? (
         <div className="grid gap-3">
           {shows.map((s, i) => (
@@ -233,14 +201,13 @@ export default function LiveShowsGrid() {
   const [loading, setLoading] = useState(!DEMO_MODE);
   const [error, setError] = useState('');
 
-  // Filters
-  const [selectedMonth, setSelectedMonth] = useState('all'); // e.g., "2025-11"
+  const [selectedMonth, setSelectedMonth] = useState('all');
   const [selectedCity, setSelectedCity] = useState('all');
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (DEMO_MODE) return; // using live sheet
+      if (DEMO_MODE) return;
       try {
         setLoading(true);
         const [devin, pat, matt] = await Promise.all([
@@ -263,164 +230,56 @@ export default function LiveShowsGrid() {
   }, []);
 
   const normalized = useMemo(() => {
-    const src = data;
-    const now = new Date();
-  
-function normalize(arr: any[]) {
-  return (arr || [])
-    .map((r) => {
-      const rawDate = (r.Date ?? r.date ?? '').trim();
-      const rawTime = (r.Time ?? r.time ?? '').trim();
-      const normalizedDate = normalizeDateText(rawDate);
-      const normalizedTime = normalizeTimeText(rawTime);
+    function normalize(arr: any[]) {
+      return (arr || [])
+        .map((r) => {
+          const rawDate = (r.Date ?? r.date ?? '').trim();
+          const rawTime = (r.Time ?? r.time ?? '').trim();
+          const normalizedDate = normalizeDateText(rawDate);
+          const normalizedTime = normalizeTimeText(rawTime);
 
-      return {
-        Date: normalizedDate,
-        Time: normalizedTime,
-        City: (r.City ?? r.city ?? '').trim(),
-        Venue: (r.Venue ?? r.venue ?? r['Venue/Show Name'] ?? '').trim(),
-        Ticket: (
-          r.Ticket ??
-          r.Tickets ??
-          r.ticket ??
-          r.tickets ??
-          r.Link ??
-          r['Ticket Link'] ??
-          r['Buy Link'] ??
-          ''
-        ).trim(),
-        Status: (r.Status ?? r.status ?? '').trim(),
-      };
-    })
-    // keep rows that at least have a Date
-    .filter((r) => r.Date)
-    // OPTIONAL: only drop clearly past shows *if* we can parse them
-    .filter((r) => {
-      const dt = r.Time ? parseDate(r.Date, r.Time) : null;
-      if (!dt) return true; // if we can’t parse, don’t throw it out
-      const today = new Date();
-      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      return dt >= todayStart;
-    })
-    .sort((a, b) => {
-      const da = a.Time ? parseDate(a.Date, a.Time)?.getTime() ?? 0 : 0;
-      const db = b.Time ? parseDate(b.Date, b.Time)?.getTime() ?? 0 : 0;
-      return da - db;
-    });
-}
+          return {
+            Date: normalizedDate,
+            Time: normalizedTime,
+            City: (r.City ?? r.city ?? '').trim(),
+            Venue: (r.Venue ?? r.venue ?? r['Venue/Show Name'] ?? '').trim(),
+            Ticket: (
+              r.Ticket ??
+              r.Tickets ??
+              r.ticket ??
+              r.tickets ??
+              r.Link ??
+              r['Ticket Link'] ??
+              r['Buy Link'] ??
+              ''
+            ).trim(),
+            Status: (r.Status ?? r.status ?? '').trim(),
+          };
+        })
+        .filter((r) => r.Date) // only require date
+        .filter((r) => {
+          // only drop past shows if we can parse
+          const dt = r.Time ? parseDate(r.Date, r.Time) : null;
+          if (!dt) return true;
+          const today = new Date();
+          const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+          return dt >= todayStart;
+        })
+        .sort((a, b) => {
+          const da = a.Time ? parseDate(a.Date, a.Time)?.getTime() ?? 0 : 0;
+          const db = b.Time ? parseDate(b.Date, b.Time)?.getTime() ?? 0 : 0;
+          return da - db;
+        });
+    }
 
-  
     return {
-      Devin: normalize(src.Devin),
-      Pat: normalize(src.Pat),
-      Matt: normalize(src.Matt),
+      Devin: normalize(data.Devin),
+      Pat: normalize(data.Pat),
+      Matt: normalize(data.Matt),
     };
   }, [data]);
 
-  // Build filter options (months & cities) across all performers
   const filterOptions = useMemo(() => {
-    const all = [...normalized.Devin, ...normalized.Pat, ...normalized.Matt];
-    const monthsSet = new Set<string>();
-    const citiesSet = new Set<string>();
-    for (const s of all) {
-      const dt = parseDate(s.Date, s.Time);
-      if (dt) monthsSet.add(monthKey(dt));
-      if (s.City) citiesSet.add(s.City);
-    }
-    const months = Array.from(monthsSet).sort();
-    const cities = Array.from(citiesSet).sort((a, b) => a.localeCompare(b));
-    return { months, cities };
-  }, [normalized]);
+    const all = [...normalized.Devi
 
-  // Apply filters per column
-  const finalData = useMemo(() => {
-    function byFilters(arr: any[]) {
-      return arr.filter((s) => {
-        const dt = parseDate(s.Date, s.Time);
-        const mk = dt ? monthKey(dt) : '';
-        const monthOk = selectedMonth === 'all' || mk === selectedMonth;
-        const cityOk = selectedCity === 'all' || s.City === selectedCity;
-        return monthOk && cityOk;
-      });
-    }
-
-    return {
-      Devin: byFilters(normalized.Devin),
-      Pat: byFilters(normalized.Pat),
-      Matt: byFilters(normalized.Matt),
-    };
-  }, [normalized, selectedMonth, selectedCity]);
-
-  return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8">
-      <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Live Shows</h1>
-        {loading && <span className="text-sm text-gray-500">Loading…</span>}
-        {error && <span className="text-sm text-red-600">{error}</span>}
-      </div>
-
-      {/* Filters */}
-      <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-gray-700">Month</span>
-          <select
-            className="w-full rounded-xl border border-gray-300 p-2"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-          >
-            <option value="all">All months</option>
-            {filterOptions.months.map((m) => (
-              <option key={m} value={m}>
-                {monthLabel(m)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-gray-700">City</span>
-          <select
-            className="w-full rounded-xl border border-gray-300 p-2"
-            value={selectedCity}
-            onChange={(e) => setSelectedCity(e.target.value)}
-          >
-            <option value="all">All cities</option>
-            {filterOptions.cities.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className="flex items-end">
-          <button
-            className="rounded-xl border px-3 py-2 text-sm shadow-sm hover:shadow border-gray-300"
-            onClick={() => {
-              setSelectedMonth('all');
-              setSelectedCity('all');
-            }}
-          >
-            Reset filters
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Column title="Devin" shows={finalData.Devin} />
-        <Column title="Pat" shows={finalData.Pat} />
-        <Column title="Matt" shows={finalData.Matt} />
-      </div>
-
-      <div className="mt-8 text-xs text-gray-500 space-y-1">
-        <p>Update any of the three tabs in Google Sheets and this page will reflect the changes automatically.</p>
-        <p>
-          Required headers: <span className="font-mono">Date</span>, <span className="font-mono">Time</span>,{' '}
-          <span className="font-mono">City</span>, <span className="font-mono">Venue</span>,{' '}
-          <span className="font-mono">Ticket</span>. Optional: <span className="font-mono">Status</span> (set to{' '}
-          <span className="font-mono">Sold Out</span> to show a badge and disable the link).
-        </p>
-      </div>
-    </div>
-  )
-          };
+::contentReference[oaicite:0]{index=0}

@@ -9,29 +9,48 @@ import React, { useEffect, useMemo, useState } from 'react';
 const SPREADSHEET_ID = '1m2nJyd_UkN0DJtWOtRW1ZbeXX5Xqc-g5XVkwvBvHqUY';
 const DEMO_MODE = false;
 
+const PUBLISHED_BASE =
+  'https://docs.google.com/spreadsheets/d/e/2PACX-1vRVtnWrYtSM5a5KMeb_k7qIukbJbnkoMqRhFDgJ60I2obN1pycbQo4E-SchhDDhZL3UqCU9N_A_LNFM/pub?output=csv&sheet=';
+
 async function fetchSheetTab(sheetName: string) {
   try {
-    const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?sheet=${encodeURIComponent(
-      sheetName
-    )}&headers=1&tqx=out:json`;
-
+    const url = PUBLISHED_BASE + encodeURIComponent(sheetName);
     const res = await fetch(url, { cache: 'no-store' });
     const text = await res.text();
 
-    // log what we got
-    console.log(`Response for ${sheetName} tab:`, text.slice(0, 300));
+    // 👇 Log what’s coming back from Google
+    console.log(`CSV for ${sheetName}:`, text.slice(0, 200));
 
-    // unwrap gviz JSON
-    const json = JSON.parse(
-      text.replace(/^.*setResponse\(/, '').replace(/\);\s*$/, '')
-    );
+    // Split CSV lines
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) return [];
 
-    const table = json.table;
-    if (!table || !table.cols || !table.rows) {
-      console.warn(`No data found for ${sheetName}`);
-      return [];
-    }
+    // First line = headers
+    const headers = lines[0].split(',').map((h) => h.trim());
 
+    // Convert each row to an object
+    const rows = lines.slice(1).map((line) => {
+      const cells = line.split(',');
+      const obj: Record<string, string> = {};
+      headers.forEach((h, i) => {
+        obj[h] = (cells[i] ?? '').trim();
+      });
+      return obj;
+    });
+
+    return rows as {
+      Date: string;
+      Time: string;
+      City: string;
+      Venue: string;
+      Ticket: string;
+      Status?: string;
+    }[];
+  } catch (err) {
+    console.error('Sheet fetch failed', err);
+    return [];
+  }
+}
     const headers = table.cols.map((c: any) => (c && c.label ? c.label.trim() : ''));
 
     const rows = table.rows
